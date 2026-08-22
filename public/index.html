@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flappy Head — Head-Controlled Flappy Bird</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game-canvas" width="480" height="640"></canvas>
+
+    <!-- Webcam preview (mirrored) -->
+    <video id="camera-preview" class="hidden" autoplay muted playsinline></video>
+
+    <!-- Main menu -->
+    <div id="menu-screen" class="overlay">
+      <h1 class="title" id="menu-title">Flappy <span>Head</span></h1>
+      <p class="subtitle" id="menu-subtitle">Move your head up &amp; down to steer the bird</p>
+      <div class="menu-buttons">
+        <button id="btn-play-head" class="btn btn-primary">📷 Play with Head Control</button>
+        <button id="btn-play-mouse" class="btn btn-secondary">🖱 Play with Mouse</button>
+      </div>
+      <div class="settings">
+        <div class="theme-row">
+          <span class="settings-label">Theme</span>
+          <button id="theme-classic" class="btn btn-small theme-btn">Classic</button>
+          <button id="theme-climba" class="btn btn-small theme-btn">Climba</button>
+        </div>
+        <label for="sensitivity-slider">Head sensitivity <strong id="sensitivity-value">3.2</strong></label>
+        <input id="sensitivity-slider" type="range" min="1" max="6" step="0.2" value="3.2" />
+        <p class="muted">Higher = smaller head movements steer the bird further</p>
+      </div>
+      <div class="leaderboard">
+        <h2>🏆 Leaderboard</h2>
+        <ol id="leaderboard-list"><li class="muted">Loading…</li></ol>
+      </div>
+    </div>
+
+    <!-- Camera setup -->
+    <div id="setup-screen" class="overlay hidden">
+      <h2>Camera Setup</h2>
+      <ul class="setup-tips">
+        <li>Allow camera access when prompted</li>
+        <li>Sit comfortably — this becomes your neutral position</li>
+        <li>Raise your head to fly up, lower it to descend</li>
+        <li>Stay in a well-lit spot, facing the camera</li>
+      </ul>
+      <button id="btn-start-camera" class="btn btn-primary">Start Camera</button>
+      <p id="setup-status" class="muted"></p>
+      <button id="btn-setup-back" class="btn btn-link">← Back to menu</button>
+    </div>
+
+    <!-- Countdown before game starts -->
+    <div id="countdown-screen" class="overlay hidden">
+      <div id="countdown-number">3</div>
+      <p id="countdown-hint" class="muted">Hold a comfortable head position…</p>
+    </div>
+
+    <!-- Game over -->
+    <div id="gameover-screen" class="overlay hidden">
+      <h2 id="gameover-title">Game Over</h2>
+      <div class="score-box">
+        <div>Score <strong id="final-score">0</strong></div>
+        <div>Best <strong id="best-score">0</strong></div>
+      </div>
+      <div class="submit-row">
+        <input id="player-name" type="text" maxlength="20" placeholder="Your name" />
+        <button id="btn-submit-score" class="btn btn-primary">Submit Score</button>
+      </div>
+      <p id="submit-status" class="muted"></p>
+      <div class="menu-buttons">
+        <button id="btn-retry" class="btn btn-primary">Play Again</button>
+        <button id="btn-menu" class="btn btn-secondary">Main Menu</button>
+      </div>
+    </div>
+
+    <!-- In-game HUD -->
+    <div id="hud" class="hidden">
+      <span id="hud-score">0</span>
+      <button id="btn-recenter" class="btn btn-small" title="Set current head position as neutral">🎯 Re-center</button>
+    </div>
+  </div>
+
+  <script src="head.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
