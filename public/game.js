@@ -10,9 +10,7 @@
 (() => {
   const canvas = document.getElementById("game-canvas");
   const ctx = canvas.getContext("2d");
-  const W = canvas.width;   // 480
-  const H = canvas.height;  // 640
-  const GROUND_H = 70;
+  const { W, H, GROUND_H } = GameSim;
 
   const HOLD_COLORS = ["#35bfc4", "#5b8c6e", "#e0745c", "#e8b64c", "#8e6bb5"];
 
@@ -32,23 +30,18 @@
   }
 
   // ---------- Game state ----------
+  const world = GameSim.create();
   const state = {
     theme: localStorage.getItem("flappy-theme") || "classic",
     mode: "mouse",           // "head" | "mouse"
     running: false,
-    score: 0,
+    starting: false,         // true during countdown so Play Again can't double-start
     best: Number(localStorage.getItem("flappy-head-best") || 0),
     mouseY: H / 2,
     targetY: H / 2,
     neutralEyeY: null,       // eye height (0..1) considered "center"
     // How strongly head movement maps to bird movement (user setting)
     headGain: Number(localStorage.getItem("flappy-head-gain")) || 3.2,
-    bird: { x: 110, y: H / 2, vy: 0, r: 16 },
-    pipes: [],               // { x, gapY, gapH, w, scored }
-    pipeTimer: 0,
-    speed: 2.3,
-    groundOffset: 0,
-    padOffset: 0,
     clouds: [],              // classic clouds / climba chalk puffs
     holds: [],               // climba background climbing holds
   };
@@ -97,62 +90,15 @@
 
   // ---------- Game logic ----------
   function resetGame() {
-    state.score = 0;
-    state.bird.y = H / 2;
-    state.bird.vy = 0;
-    state.pipes = [];
-    state.pipeTimer = 0;
-    state.speed = 2.3;
+    GameSim.reset(world);
     el("hud-score").textContent = "0";
   }
 
-  function spawnPipe() {
-    const gapH = Math.max(150, 200 - state.score * 2); // narrows as you score
-    const margin = 60;
-    const gapY = margin + Math.random() * (H - GROUND_H - gapH - margin * 2);
-    state.pipes.push({ x: W + 40, gapY, gapH, w: 66, scored: false });
-  }
-
-  function update(dt) {
-    updateTarget();
-
-    // Character eases toward the target with spring-damper motion
-    const b = state.bird;
-    const stiffness = 0.006;
-    const damping = 0.88;
-    b.vy += (state.targetY - b.y) * stiffness * dt;
-    b.vy *= damping;
-    b.y += b.vy * dt * 0.06;
-
-    // Pipes
-    state.pipeTimer += dt;
-    const interval = Math.max(1100, 1600 - state.score * 10);
-    if (state.pipeTimer > interval) {
-      state.pipeTimer = 0;
-      spawnPipe();
-    }
-
-    const px = state.speed * dt * 0.06;
-    state.speed = 2.3 + Math.min(2, state.score * 0.06); // gentle ramp-up
-    state.groundOffset = (state.groundOffset + px) % 24;
-    state.padOffset = (state.padOffset + px) % 96;
-
-    for (const p of state.pipes) {
-      p.x -= px;
-      if (!p.scored && p.x + p.w < b.x - b.r) {
-        p.scored = true;
-        state.score++;
-        el("hud-score").textContent = state.score;
-      }
-    }
-    state.pipes = state.pipes.filter((p) => p.x + p.w > -10);
-
-    // Clouds / chalk puffs drift
+  function driftDecor(px) {
     for (const c of state.clouds) {
       c.x -= px * 0.25 * c.s;
       if (c.x < -80) c.x = W + 60;
     }
-    // Background holds drift (parallax)
     for (const h of state.holds) {
       h.x -= px * 0.35;
       if (h.x < -20) {
@@ -160,15 +106,14 @@
         h.y = 30 + Math.random() * (H - GROUND_H - 90);
       }
     }
+  }
 
-    // Collisions
-    if (b.y - b.r < 0 || b.y + b.r > H - GROUND_H) return gameOver();
-    for (const p of state.pipes) {
-      const inX = b.x + b.r > p.x && b.x - b.r < p.x + p.w;
-      if (inX && (b.y - b.r < p.gapY || b.y + b.r > p.gapY + p.gapH)) {
-        return gameOver();
-      }
-    }
+  function update(dt) {
+    updateTarget();
+    const result = GameSim.update(world, dt, state.targetY);
+    if (result.points) el("hud-score").textContent = world.score;
+    driftDecor(result.px);
+    if (result.died) gameOver();
   }
 
   // ---------- Rendering ----------
@@ -176,7 +121,7 @@
     if (state.theme === "climba") {
       drawGymWall();
       drawChalkPuffs();
-      for (const p of state.pipes) {
+      for (const p of world.pipes) {
         drawBoulder(p, true);
         drawBoulder(p, false);
       }
@@ -184,7 +129,7 @@
     } else {
       drawSky();
       drawClouds();
-      for (const p of state.pipes) {
+      for (const p of world.pipes) {
         drawPipe(p.x, 0, p.w, p.gapY, true);
         drawPipe(p.x, p.gapY + p.gapH, p.w, H - GROUND_H - (p.gapY + p.gapH), false);
       }
@@ -258,7 +203,7 @@
     ctx.fillStyle = "#7cb342";
     ctx.fillRect(0, H - GROUND_H, W, 14);
     ctx.fillStyle = "#689f38";
-    for (let x = -state.groundOffset; x < W; x += 24) {
+    for (let x = -world.groundOffset; x < W; x += 24) {
       ctx.fillRect(x, H - GROUND_H, 12, 14);
     }
   }
@@ -271,7 +216,7 @@
     // Faint panel seams
     ctx.strokeStyle = "rgba(0,0,0,0.06)";
     ctx.lineWidth = 2;
-    const seamOffset = (state.padOffset * 0.5) % 120;
+    const seamOffset = (world.padOffset * 0.5) % 120;
     for (let x = -seamOffset; x < W; x += 120) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
@@ -368,12 +313,12 @@
 
     // Pad seams scroll with the world
     ctx.fillStyle = "rgba(0,0,0,0.4)";
-    for (let x = -state.padOffset; x < W; x += 96) {
+    for (let x = -world.padOffset; x < W; x += 96) {
       ctx.fillRect(x, H - GROUND_H, 4, GROUND_H);
     }
     // Velcro flap detail
     ctx.fillStyle = "rgba(255,255,255,0.12)";
-    for (let x = -state.padOffset + 30; x < W; x += 96) {
+    for (let x = -world.padOffset + 30; x < W; x += 96) {
       ctx.fillRect(x, H - GROUND_H + 26, 36, 8);
     }
   }
@@ -385,7 +330,7 @@
   }
 
   function drawBird() {
-    const b = state.bird;
+    const b = world.bird;
     const tilt = Math.max(-0.5, Math.min(0.5, b.vy * 0.06));
 
     ctx.save();
@@ -433,7 +378,7 @@
   // Vector redraw of the Climba mascot: teal blob, googly eyes,
   // halftone-dotted belly
   function drawMascot() {
-    const b = state.bird;
+    const b = world.bird;
     const tilt = Math.max(-0.4, Math.min(0.4, b.vy * 0.05));
     const bob = Math.sin(performance.now() / 220) * 1.5; // gentle idle wobble
 
@@ -529,43 +474,50 @@
 
   // ---------- Flow ----------
   async function startGame(mode) {
-    state.mode = mode;
-    resetGame();
-    showScreen("countdown");
-    el("countdown-hint").textContent =
-      mode === "head"
-        ? "Hold a comfortable head position — this becomes your center…"
-        : "Move the mouse up and down to steer!";
+    if (state.starting || state.running) return;
+    state.starting = true;
 
-    for (let n = 3; n >= 1; n--) {
-      el("countdown-number").textContent = n;
-      await new Promise((r) => setTimeout(r, 800));
+    try {
+      state.mode = mode;
+      resetGame();
+      showScreen("countdown");
+      el("countdown-hint").textContent =
+        mode === "head"
+          ? "Hold a comfortable head position — this becomes your center…"
+          : "Move the mouse up and down to steer!";
+
+      for (let n = 3; n >= 1; n--) {
+        el("countdown-number").textContent = n;
+        await new Promise((r) => setTimeout(r, 800));
+      }
+
+      if (mode === "head") {
+        // Current head height becomes the neutral reference
+        state.neutralEyeY = FaceController.getEyeY() ?? 0.5;
+        el("btn-recenter").classList.remove("hidden");
+      } else {
+        el("btn-recenter").classList.add("hidden");
+      }
+
+      showScreen(null);
+      hud.classList.remove("hidden");
+      state.running = true;
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    } finally {
+      state.starting = false;
     }
-
-    if (mode === "head") {
-      // Current head height becomes the neutral reference
-      state.neutralEyeY = FaceController.getEyeY() ?? 0.5;
-      el("btn-recenter").classList.remove("hidden");
-    } else {
-      el("btn-recenter").classList.add("hidden");
-    }
-
-    showScreen(null);
-    hud.classList.remove("hidden");
-    state.running = true;
-    lastTime = performance.now();
-    requestAnimationFrame(loop);
   }
 
   function gameOver() {
     state.running = false;
     hud.classList.add("hidden");
 
-    if (state.score > state.best) {
-      state.best = state.score;
+    if (world.score > state.best) {
+      state.best = world.score;
       localStorage.setItem("flappy-head-best", state.best);
     }
-    el("final-score").textContent = state.score;
+    el("final-score").textContent = world.score;
     el("best-score").textContent = state.best;
     el("submit-status").textContent = "";
     el("btn-submit-score").disabled = false;
@@ -603,7 +555,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: el("player-name").value,
-          score: state.score,
+          score: world.score,
         }),
       });
       const data = await res.json();
