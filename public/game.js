@@ -2,10 +2,11 @@
  * Flappy Head — raise or lower your head to steer the character
  * (or use the mouse as a fallback).
  *
- * Two themes share all game logic:
- *   classic — blue sky, green pipes, yellow bird
- *   climba  — bouldering gym: wall + holds, rock spires, crash pads,
- *             and the Climba mascot as the flying character
+ * Themes share all game logic:
+ *   classic   — blue sky, green pipes, yellow bird
+ *   climba    — bouldering gym: wall + holds, rock spires, crash pads,
+ *               and the Climba mascot as the flying character
+ *   christmas — night sky, snowfall, Christmas trees, santa-hat bird
  */
 (() => {
   const canvas = document.getElementById("game-canvas");
@@ -42,8 +43,9 @@
     neutralEyeY: null,       // eye height (0..1) considered "center"
     // How strongly head movement maps to bird movement (user setting)
     headGain: Number(localStorage.getItem("flappy-head-gain")) || 3.2,
-    clouds: [],              // classic clouds / climba chalk puffs
-    holds: [],               // climba background climbing holds
+    clouds: [],              // classic clouds / climba chalk / christmas snow
+    holds: [],               // climba climbing holds / christmas stars
+    snow: [],                // christmas falling snowflakes
   };
 
   for (let i = 0; i < 5; i++) {
@@ -60,6 +62,15 @@
       r: 7 + Math.random() * 9,
       c: HOLD_COLORS[i % HOLD_COLORS.length],
       a: Math.random() * Math.PI,
+    });
+  }
+  for (let i = 0; i < 40; i++) {
+    state.snow.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: 1.2 + Math.random() * 2.4,
+      vy: 0.4 + Math.random() * 1.1,
+      vx: -0.3 + Math.random() * 0.6,
     });
   }
 
@@ -106,6 +117,16 @@
         h.y = 30 + Math.random() * (H - GROUND_H - 90);
       }
     }
+    for (const s of state.snow) {
+      s.y += s.vy;
+      s.x += s.vx - px * 0.15;
+      if (s.y > H) {
+        s.y = -4;
+        s.x = Math.random() * W;
+      }
+      if (s.x < -10) s.x = W + 10;
+      if (s.x > W + 10) s.x = -10;
+    }
   }
 
   function update(dt) {
@@ -126,6 +147,15 @@
         drawBoulder(p, false);
       }
       drawCrashPads();
+    } else if (state.theme === "christmas") {
+      drawNightSky();
+      drawStars();
+      for (const p of world.pipes) {
+        drawTreePipe(p, true);
+        drawTreePipe(p, false);
+      }
+      drawSnowGround();
+      drawSnowfall();
     } else {
       drawSky();
       drawClouds();
@@ -138,7 +168,8 @@
 
     // Target height indicator (head mode)
     if (state.running && state.mode === "head") {
-      ctx.strokeStyle = state.theme === "climba" ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.45)";
+      ctx.strokeStyle =
+        state.theme === "climba" ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.45)";
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
       ctx.moveTo(0, state.targetY);
@@ -323,9 +354,146 @@
     }
   }
 
+  // ----- Christmas world -----
+  function drawNightSky() {
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, "#0b1a3a");
+    sky.addColorStop(0.55, "#1a3a5c");
+    sky.addColorStop(1, "#2d4a6f");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // Soft moonlight glow
+    const moon = ctx.createRadialGradient(W - 70, 70, 8, W - 70, 70, 90);
+    moon.addColorStop(0, "rgba(255,250,220,0.95)");
+    moon.addColorStop(0.35, "rgba(255,245,200,0.35)");
+    moon.addColorStop(1, "rgba(255,245,200,0)");
+    ctx.fillStyle = moon;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#fff8dc";
+    ctx.beginPath();
+    ctx.arc(W - 70, 70, 22, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawStars() {
+    const twinkle = 0.55 + 0.45 * Math.sin(performance.now() / 700);
+    for (let i = 0; i < state.holds.length; i++) {
+      const h = state.holds[i];
+      const bright = i % 3 === 0 ? twinkle : 0.75;
+      ctx.fillStyle = `rgba(255,255,230,${0.45 + bright * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(h.x, (h.y * 0.55) % (H - GROUND_H - 40) + 12, 1.2 + (i % 3) * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawTreePipe(p, isTop) {
+    const x = p.x;
+    const w = p.w;
+    const y = isTop ? 0 : p.gapY + p.gapH;
+    const h = isTop ? p.gapY : H - GROUND_H - y;
+    if (h <= 0) return;
+
+    // Tree trunk column
+    const trunkW = Math.max(14, w * 0.28);
+    const trunkX = x + (w - trunkW) / 2;
+    ctx.fillStyle = "#5d4037";
+    ctx.fillRect(trunkX, y, trunkW, h);
+
+    // Layered evergreen foliage
+    const layers = Math.max(2, Math.floor(h / 48));
+    const ORNAMENTS = ["#c62828", "#ffd54f", "#e53935", "#fff59d", "#90caf9"];
+    for (let i = 0; i < layers; i++) {
+      const ly = isTop
+        ? y + h - 10 - i * 42
+        : y + 10 + i * 42;
+      const spread = w * 0.55 + (i % 3) * 4;
+      ctx.fillStyle = i % 2 === 0 ? "#1b5e20" : "#2e7d32";
+      ctx.beginPath();
+      if (isTop) {
+        ctx.moveTo(x + w / 2, ly - 36);
+        ctx.lineTo(x + w / 2 + spread, ly + 8);
+        ctx.lineTo(x + w / 2 - spread, ly + 8);
+      } else {
+        ctx.moveTo(x + w / 2, ly + 36);
+        ctx.lineTo(x + w / 2 + spread, ly - 8);
+        ctx.lineTo(x + w / 2 - spread, ly - 8);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Ornaments
+      if (h > 50) {
+        const oy = isTop ? ly - 8 : ly + 8;
+        ctx.fillStyle = ORNAMENTS[(i + Math.floor(p.gapY)) % ORNAMENTS.length];
+        ctx.beginPath();
+        ctx.arc(x + w / 2 - spread * 0.35, oy, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = ORNAMENTS[(i + 2 + Math.floor(p.gapY)) % ORNAMENTS.length];
+        ctx.beginPath();
+        ctx.arc(x + w / 2 + spread * 0.3, oy - (isTop ? 6 : -6), 2.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Star / snowcap facing the gap
+    const tipY = isTop ? y + h : y;
+    ctx.fillStyle = "#ffd54f";
+    ctx.beginPath();
+    const sr = 7;
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
+      const a2 = a + Math.PI / 5;
+      const r1 = sr;
+      const r2 = sr * 0.4;
+      const px1 = x + w / 2 + Math.cos(a) * r1;
+      const py1 = tipY + Math.sin(a) * r1 * (isTop ? 1 : -1);
+      const px2 = x + w / 2 + Math.cos(a2) * r2;
+      const py2 = tipY + Math.sin(a2) * r2 * (isTop ? 1 : -1);
+      if (i === 0) ctx.moveTo(px1, py1);
+      else ctx.lineTo(px1, py1);
+      ctx.lineTo(px2, py2);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawSnowGround() {
+    ctx.fillStyle = "#cfd8dc";
+    ctx.fillRect(0, H - GROUND_H, W, GROUND_H);
+    ctx.fillStyle = "#eceff1";
+    ctx.fillRect(0, H - GROUND_H, W, 18);
+
+    // Soft snow drifts
+    ctx.fillStyle = "#ffffff";
+    for (let x = -world.groundOffset; x < W + 40; x += 36) {
+      ctx.beginPath();
+      ctx.ellipse(x + 18, H - GROUND_H + 6, 20, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Red ribbon stripe under the snow
+    ctx.fillStyle = "#b71c1c";
+    ctx.fillRect(0, H - 22, W, 6);
+    ctx.fillStyle = "#ffd54f";
+    for (let x = -world.padOffset; x < W; x += 28) {
+      ctx.fillRect(x, H - 22, 10, 6);
+    }
+  }
+
+  function drawSnowfall() {
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    for (const s of state.snow) {
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   // ----- Characters -----
   function drawPlayer() {
     if (state.theme === "climba") drawMascot();
+    else if (state.theme === "christmas") drawSantaBird();
     else drawBird();
   }
 
@@ -435,6 +603,76 @@
     ctx.restore();
   }
 
+  // Classic bird wearing a little Santa hat
+  function drawSantaBird() {
+    const b = world.bird;
+    const tilt = Math.max(-0.5, Math.min(0.5, b.vy * 0.06));
+
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(tilt);
+
+    // Body
+    ctx.fillStyle = "#ffd23f";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, b.r + 2, b.r, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#e6a817";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Wing
+    const flap = Math.sin(performance.now() / 90) * 5;
+    ctx.fillStyle = "#ffb300";
+    ctx.beginPath();
+    ctx.ellipse(-4, 2 + flap * 0.4, 9, 6, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eye
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(7, -5, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#263238";
+    ctx.beginPath();
+    ctx.arc(9, -5, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Beak
+    ctx.fillStyle = "#ff7043";
+    ctx.beginPath();
+    ctx.moveTo(b.r - 2, -2);
+    ctx.lineTo(b.r + 10, 2);
+    ctx.lineTo(b.r - 2, 6);
+    ctx.closePath();
+    ctx.fill();
+
+    // Santa hat
+    ctx.fillStyle = "#c62828";
+    ctx.beginPath();
+    ctx.moveTo(-10, -b.r + 2);
+    ctx.lineTo(8, -b.r + 4);
+    ctx.lineTo(-2, -b.r - 16);
+    ctx.closePath();
+    ctx.fill();
+    // Hat brim
+    ctx.fillStyle = "#fafafa";
+    ctx.fillRect(-12, -b.r + 1, 22, 5);
+    // Pom-pom
+    ctx.beginPath();
+    ctx.arc(-2, -b.r - 17, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Scarf
+    ctx.fillStyle = "#c62828";
+    ctx.fillRect(-6, 8, 18, 4);
+    ctx.fillRect(8, 10, 4, 10);
+    ctx.fillStyle = "#ffd54f";
+    ctx.fillRect(8, 14, 4, 3);
+
+    ctx.restore();
+  }
+
   // ---------- Loop ----------
   let lastTime = 0;
   function loop(t) {
@@ -452,6 +690,7 @@
     localStorage.setItem("flappy-theme", theme);
     el("theme-classic").classList.toggle("active", theme === "classic");
     el("theme-climba").classList.toggle("active", theme === "climba");
+    el("theme-christmas").classList.toggle("active", theme === "christmas");
 
     const title = el("menu-title");
     const subtitle = el("menu-subtitle");
@@ -461,6 +700,10 @@
         ` onerror="this.outerHTML='CLIM<span>ば</span>'">`;
       subtitle.textContent = "Steer the mascot with your head — send it!";
       el("gameover-title").textContent = "You fell! (onto the pad)";
+    } else if (theme === "christmas") {
+      title.innerHTML = "Flappy <span>Noël</span>";
+      subtitle.textContent = "Steer through the Christmas trees with your head";
+      el("gameover-title").textContent = "Ho ho oh no!";
     } else {
       title.innerHTML = "Flappy <span>Head</span>";
       subtitle.textContent = "Move your head up & down to steer the bird";
@@ -471,6 +714,7 @@
 
   el("theme-classic").addEventListener("click", () => applyTheme("classic"));
   el("theme-climba").addEventListener("click", () => applyTheme("climba"));
+  el("theme-christmas").addEventListener("click", () => applyTheme("christmas"));
 
   // ---------- Flow ----------
   async function startGame(mode) {

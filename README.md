@@ -12,6 +12,7 @@ fallback for devices without a webcam.
   countdown becomes the neutral center, with a Re-center button in-game
 - **Mouse/touch mode** fallback
 - Canvas-rendered game with pipes, scoring, and increasing difficulty
+- **Themes** — Classic, Climba (bouldering gym), and Christmas (night sky + trees)
 - **Leaderboard** backed by an Express API (top 10 scores stored server-side)
 - Personal best stored in the browser
 
